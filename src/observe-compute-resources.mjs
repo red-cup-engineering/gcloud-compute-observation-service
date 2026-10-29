@@ -2,6 +2,8 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 const nonempty = value => typeof value === 'string' && value.length > 0;
 const unavailable = reason => ({status:'unavailable', reason});
 const observed = value => value?.status === 'observed';
+const resourceName = value => nonempty(value?.metadata?.name) ? value.metadata.name
+  : (nonempty(value?.name) ? value.name.split('/').at(-1) : null);
 function list(reading, valid = object) {
   if (!observed(reading)) return reading;
   return Array.isArray(reading.value) && reading.value.every(valid)
@@ -32,6 +34,12 @@ export async function observeGoogleCloudComputeResources(configuration, {jsonCom
     const run = enabled.includes('run.googleapis.com')
       ? list(await gcloud(['run','services','list',`--project=${id}`,'--platform=managed',`--region=${region}`]),
         row => object(row) && nonempty(row.metadata?.name)) : disabled();
+    const runJobs = enabled.includes('run.googleapis.com')
+      ? list(await gcloud(['run','jobs','list',`--project=${id}`,`--region=${region}`]),
+        row => object(row) && nonempty(resourceName(row))) : disabled();
+    const functions = enabled.includes('cloudfunctions.googleapis.com')
+      ? list(await gcloud(['functions','list',`--project=${id}`,`--regions=${region}`]),
+        row => object(row) && nonempty(row.name)) : disabled();
     const storage = enabled.includes('storage.googleapis.com')
       ? list(await gcloud(['storage','buckets','list',`--project=${id}`]), row => object(row) && nonempty(row.name)) : disabled();
     const compute = billing.value?.billingEnabled === false
@@ -52,6 +60,15 @@ export async function observeGoogleCloudComputeResources(configuration, {jsonCom
           traffic:(Array.isArray(service.status?.traffic)?service.status.traffic:[]).map(target =>
             ({revision:target.revisionName,percent:target.percent??0,tag:target.tag}))};
       })} : {...run,region},
+      // A configured job is not an execution lease, remaining quota or proof of successful invocation.
+      cloudRunJobs:observed(runJobs) ? {region,status:'observed',jobs:runJobs.value.map(job =>
+        ({name:resourceName(job)}))} : {...runJobs,region},
+      // The native function API may return v1 or v2 runtime fields; retain only observed coordinates.
+      cloudFunctions:observed(functions) ? {region,status:'observed',functions:functions.value.map(fn =>
+        ({name:fn.name.split('/').at(-1),runtime:typeof fn.buildConfig?.runtime === 'string'
+          ? fn.buildConfig.runtime : (typeof fn.runtime === 'string' ? fn.runtime : null),
+          state:typeof fn.state === 'string' ? fn.state : (typeof fn.status === 'string' ? fn.status : null)}))}
+        : {...functions,region},
       storageBuckets:observed(storage) ? {status:'observed',buckets:storage.value.map(bucket =>
         ({name:bucket.name,location:bucket.location??null,storageClass:bucket.storageClass??null}))} : storage,
       computeInstances:observed(compute) ? {status:'observed',instances:compute.value.map(instance =>
