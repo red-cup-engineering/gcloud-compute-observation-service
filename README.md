@@ -8,3 +8,23 @@
 <!-- 561-group-standards:badges:end -->
 
 Read-only Google Cloud compute inventory through an injected native command boundary.
+
+## Scoped serverless inventory
+
+observeGoogleCloudComputeResources({cloudRunRegion}, {jsonCommand}) lists
+Cloud Run services, Cloud Run jobs, Cloud Functions and storage buckets
+as separate observed resources for each visible project. Jobs and functions
+are restricted to the explicitly selected region; this is not a claim
+about any other region. The host supplies the native gcloud command boundary;
+the observer does not acquire credentials, select a provider account, deploy,
+execute jobs or route Work.
+
+A listed job/function is a configuration observation, not proof of usable
+remaining quota, an invocation grant, zero-cash eligibility, or successful
+task execution. A project listing is not evidence that any particular local
+authenticated account may invoke every resource in that project. Enabled
+APIs, IAM permissions, billing, account entitlements, service readiness and
+actual execution must be independently qualified by their existing owners.
+Explicit not-enabled, unavailable and observed empty inventories remain
+different states. Project-level provider responses are reduced to typed
+coordinates without carrying arbitrary credential/configuration fields.
